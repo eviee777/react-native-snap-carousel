@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import { Animated, Easing, FlatList, I18nManager, Platform, ScrollView, View, ViewPropTypes } from 'react-native';
+import { Animated, Easing, FlatList, I18nManager, Platform, ScrollView, View, ViewPropTypes , Text} from 'react-native';
 import PropTypes from 'prop-types';
 import shallowCompare from 'react-addons-shallow-compare';
 import {
@@ -60,13 +60,14 @@ export default class Carousel extends Component {
         loopClonesPerSide: PropTypes.number,
         scrollInterpolator: PropTypes.func,
         slideInterpolatedStyle: PropTypes.func,
-        slideStyle: ViewPropTypes ? ViewPropTypes.style : View.propTypes.style,
+        slideStyle: Animated.View.propTypes.style,
         shouldOptimizeUpdates: PropTypes.bool,
         swipeThreshold: PropTypes.number,
         useScrollView: PropTypes.bool,
         vertical: PropTypes.bool,
         onBeforeSnapToItem: PropTypes.func,
-        onSnapToItem: PropTypes.func
+        onSnapToItem: PropTypes.func,
+        setLastActive: PropTypes.func
     };
 
     static defaultProps = {
@@ -97,7 +98,8 @@ export default class Carousel extends Component {
         shouldOptimizeUpdates: true,
         swipeThreshold: 20,
         useScrollView: !AnimatedFlatList,
-        vertical: false
+        vertical: false,
+        setLastActive:()=>{}
     }
 
     constructor (props) {
@@ -140,7 +142,7 @@ export default class Carousel extends Component {
         this._onTouchRelease = this._onTouchRelease.bind(this);
 
         this._getKeyExtractor = this._getKeyExtractor.bind(this);
-
+        this.zindex = 1
         // Native driver for scroll events
         const scrollEventConfig = {
             listener: this._onScroll,
@@ -487,7 +489,7 @@ export default class Carousel extends Component {
     _getScrollOffset (event) {
         const { vertical } = this.props;
         return (event && event.nativeEvent && event.nativeEvent.contentOffset &&
-            event.nativeEvent.contentOffset[vertical ? 'y' : 'x']) || 0;
+            Math.round(event.nativeEvent.contentOffset[vertical ? 'y' : 'x'])) || 0;
     }
 
     _getContainerInnerMargin (opposite = false) {
@@ -564,7 +566,9 @@ export default class Carousel extends Component {
 
             if (!this._shouldAnimateSlides(props)) {
                 animatedValue = 1;
+
             } else if (this._shouldUseCustomAnimation()) {
+
                 animatedValue = new Animated.Value(_index === this._activeItem ? 1 : 0);
             } else {
                 let interpolator;
@@ -760,6 +764,7 @@ export default class Carousel extends Component {
             if (this._activeItem !== nextActiveItem) {
                 this._activeItem = nextActiveItem;
             }
+
 
             if (itemReached) {
                 if (this._canFireBeforeCallback) {
@@ -966,6 +971,7 @@ export default class Carousel extends Component {
         }
 
         if (index !== this._previousActiveItem) {
+
             this._previousActiveItem = index;
 
             // Placed here to allow overscrolling for edges items
@@ -975,14 +981,18 @@ export default class Carousel extends Component {
 
             if (fireCallback) {
                 if (onBeforeSnapToItem) {
+
                     this._canFireBeforeCallback = true;
                 }
 
                 if (onSnapToItem) {
+
                     this._canFireCallback = true;
                 }
             }
+            this.props.setLastActive(this._previousActiveItem)
         }
+
 
         this._itemToSnapTo = index;
         this._scrollOffsetRef = this._positions[index] && this._positions[index].start;
@@ -1012,7 +1022,7 @@ export default class Carousel extends Component {
                     if (!initial && index === this._activeItem && !this._onScrollTriggered) {
                         this._onScroll();
                     }
-                }, 250);
+                }, 150);
             }
         }
     }
@@ -1104,6 +1114,7 @@ export default class Carousel extends Component {
 
     // https://github.com/facebook/react-native/issues/1831#issuecomment-231069668
     triggerRenderingHack (offset) {
+
         // Avoid messing with user scroll
         if (Date.now() - this._lastScrollDate < 500) {
             return;
@@ -1122,15 +1133,15 @@ export default class Carousel extends Component {
         const { layoutCardOffset, slideInterpolatedStyle } = this.props;
 
         if (slideInterpolatedStyle) {
-            return slideInterpolatedStyle(index, animatedValue, this.props);
+            return slideInterpolatedStyle(index, animatedValue, this.props,  this._activeItem);
         } else if (this._shouldUseTinderLayout()) {
             return tinderAnimatedStyles(index, animatedValue, this.props, layoutCardOffset);
         } else if (this._shouldUseStackLayout()) {
             return stackAnimatedStyles(index, animatedValue, this.props, layoutCardOffset);
         } else if (this._shouldUseShiftLayout()) {
-            return shiftAnimatedStyles(index, animatedValue, this.props);
+            return shiftAnimatedStyles(index, animatedValue, this.props, this._activeItem);
         } else {
-            return defaultAnimatedStyles(index, animatedValue, this.props);
+            return defaultAnimatedStyles(index, animatedValue, this.props, this._activeItem);
         }
     }
 
@@ -1145,7 +1156,8 @@ export default class Carousel extends Component {
             sliderHeight,
             sliderWidth,
             slideStyle,
-            vertical
+            vertical,
+            data
         } = this.props;
 
         const animatedValue = interpolators && interpolators[index];
@@ -1156,7 +1168,8 @@ export default class Carousel extends Component {
 
         const animate = this._shouldAnimateSlides();
         const Component = animate ? Animated.View : View;
-        const animatedStyle = animate ? this._getSlideInterpolatedStyle(index, animatedValue) : {};
+        const animatedStyle = animate ? this._getSlideInterpolatedStyle(index, animatedValue, this._activeItem) : {};
+
 
         const parallaxProps = hasParallaxImages ? {
             scrollPosition: this._scrollPos,
@@ -1172,9 +1185,18 @@ export default class Carousel extends Component {
         const specificProps = this._needsScrollView() ? {
             key: keyExtractor ? keyExtractor(item, index) : this._getKeyExtractor(item, index)
         } : {};
+        let zIndex = index == this._previousActiveItem? 10:1
+        if (Math.abs(index-this._previousActiveItem)==data.length){
+          zIndex = 11
+        }
+
+
+
+
+        let txt = index + " "+ this._previousActiveItem
 
         return (
-            <Component style={[mainDimension, slideStyle, animatedStyle]} pointerEvents={'box-none'} {...specificProps}>
+            <Component style={[mainDimension, slideStyle, animatedStyle, {zIndex}]} pointerEvents={'box-none'} {...specificProps}>
                 { renderItem({ item, index }, parallaxProps) }
             </Component>
         );
